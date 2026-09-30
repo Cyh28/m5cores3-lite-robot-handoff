@@ -1,0 +1,3 @@
+deepface[tensorflow]==0.0.101
+emotiefflib==1.1.1
+tf-keras==2.21.0

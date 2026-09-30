@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>面部动作与状态线索 · 随身感知原型</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #172b34; background: #f4f7f6; }
+    * { box-sizing: border-box; }
+    body { max-width: 1120px; margin: 0 auto; padding: 28px 20px 50px; }
+    header { display: flex; justify-content: space-between; align-items: start; gap: 18px; margin-bottom: 22px; }
+    h1 { font-size: clamp(1.65rem, 3vw, 2.35rem); margin: 4px 0 8px; letter-spacing: -.03em; }
+    h2 { font-size: 1.05rem; margin: 0 0 16px; }
+    p { line-height: 1.6; color: #5a6c72; margin: 0; }
+    a { color: #126e66; }
+    .eyebrow { color: #138579; font-size: .8rem; font-weight: 700; letter-spacing: .14em; }
+    .header-link { white-space: nowrap; margin-top: 10px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr); gap: 18px; }
+    .card { background: #fff; border: 1px solid #dce7e3; border-radius: 18px; box-shadow: 0 10px 30px #163a330b; overflow: hidden; }
+    .camera { padding: 16px; }
+    .stage { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: #142a30; border-radius: 12px; }
+    video, #device-image, canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
+    [hidden] { display: none !important; }
+    canvas { pointer-events: none; }
+    .placeholder { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: #c5d6d6; padding: 25px; }
+    .placeholder span { display: block; font-size: 2.7rem; margin-bottom: 8px; }
+    .stage.live .placeholder { display: none; }
+    .stage-badge { position: absolute; top: 15px; left: 15px; display: flex; gap: 6px; align-items: center; padding: 6px 10px; color: #fff; background: #102b2bd9; border-radius: 99px; font-size: .82rem; }
+    .dot { width: 8px; height: 8px; background: #a8b9b8; border-radius: 50%; }
+    .live .dot { background: #53e4bc; box-shadow: 0 0 10px #53e4bc; }
+    .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 15px 1px 2px; }
+    .audio-strip { margin-top: 13px; padding: 13px 14px; border: 1px solid #dce7e3; border-radius: 12px; background: #f8fbfa; }
+    .audio-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .84rem; color: #466068; }
+    .audio-head strong { color: #17383c; }
+    .level { flex: 1; min-width: 120px; height: 8px; overflow: hidden; border-radius: 99px; background: #dce7e3; }
+    .level > div { width: 0; height: 100%; border-radius: inherit; background: #29a88f; transition: width .08s linear; }
+    #audio-wave { display: block; width: 100%; height: 54px; margin-top: 10px; border-radius: 8px; background: #102a30; }
+    .audio-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .audio-actions button { padding: 8px 12px; font-size: .82rem; }
+    .audio-actions label { margin-left: auto; font-size: .78rem; color: #526f70; }
+    .audio-actions input { width: 92px; vertical-align: middle; }
+    button { font: inherit; padding: 11px 18px; border: 0; border-radius: 9px; color: white; background: #0b776b; cursor: pointer; font-weight: 650; }
+    button.secondary { background: #36515b; }
+    button:disabled { opacity: .5; cursor: default; }
+    select { font: inherit; padding: 10px 12px; border: 1px solid #b9cac6; border-radius: 9px; color: #17383c; background: #fff; }
+    #status { flex: 1; min-width: 190px; color: #466068; font-size: .88rem; }
+    .panel { padding: 23px; }
+    .result { border-radius: 13px; padding: 19px; background: #edf7f4; border: 1px solid #d4ebe3; }
+    .result small { display: block; font-size: .78rem; color: #4c736c; margin-bottom: 7px; }
+    .result strong { display: block; font-size: clamp(1.4rem, 2.5vw, 2rem); line-height: 1.3; }
+    .result p { margin-top: 8px; font-size: .86rem; }
+    .metric { margin-top: 24px; }
+    .metric-row { display: flex; justify-content: space-between; margin: 13px 0 5px; font-size: .88rem; }
+    .metric-row output { color: #526f70; font-variant-numeric: tabular-nums; }
+    .track { height: 7px; background: #e9efed; border-radius: 99px; overflow: hidden; }
+    .track > div { height: 100%; width: 0; background: #3ca995; border-radius: inherit; transition: width .18s ease; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; min-height: 36px; margin-top: 18px; }
+    .chip { padding: 6px 9px; border-radius: 99px; color: #07594f; background: #e0f3ed; font-size: .78rem; }
+    .hint { font-size: .82rem; margin-top: 20px; border-top: 1px solid #e8eeeb; padding-top: 16px; }
+    .footnote { margin-top: 17px; font-size: .83rem; }
+    .compare { margin-top: 18px; padding: 23px; }
+    .compare-intro { margin-bottom: 16px; font-size: .88rem; }
+    .model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+    .model-card { border: 1px solid #dce7e3; border-radius: 13px; padding: 18px; background: #fbfdfc; }
+    .model-card h3 { font-size: 1rem; margin: 0 0 8px; }
+    .model-card strong { display: block; font-size: 1.35rem; margin: 6px 0; }
+    .model-card p { font-size: .82rem; }
+    .model-scores { margin-top: 10px; color: #435e63; font-size: .83rem; line-height: 1.7; }
+    .model-status { color: #527a72; }
+    .model-error { color: #a0453b; }
+    .state-panel { margin-top: 18px; padding: 23px; }
+    .state-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+    .state-card { border: 1px solid #dce7e3; border-radius: 13px; padding: 18px; background: #fbfdfc; }
+    .state-card small { color: #56766d; }
+    .state-card strong { display: block; font-size: 1.18rem; margin: 8px 0; }
+    .state-card p { font-size: .84rem; }
+    .state-numbers { display: flex; gap: 22px; flex-wrap: wrap; margin: 18px 0 10px; }
+    .state-numbers span { color: #52676a; font-size: .82rem; }
+    .state-numbers strong { display: block; color: #18373c; font-size: 1.05rem; margin-top: 3px; }
+    .timeline-box { border: 1px solid #e4ece9; border-radius: 10px; padding: 12px; }
+    .timeline-box svg { display: block; width: 100%; height: 90px; background: linear-gradient(#f8fbfa, #fff); }
+    .timeline-box polyline { fill: none; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+    .eye-line { stroke: #b75b49; }
+    .activity-line { stroke: #0f9b89; }
+    .legend { display: flex; gap: 16px; color: #61777a; font-size: .78rem; margin-top: 6px; }
+    .legend b { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 5px; background: #b75b49; }
+    .legend span:last-child b { background: #0f9b89; }
+    @media (max-width: 790px) { header { display: block; } .header-link { display: inline-block; margin-top: 12px; } .layout, .model-grid, .state-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="eyebrow">电脑 / CoreS3‑Lite 摄像头 · 实时原型</div>
+      <h1>面部动作与状态线索</h1>
+      <p>追踪一张脸，观察表情、闭眼和凝视的时间变化。开始后才会请求摄像头权限。</p>
+    </div>
+    <a class="header-link" href="/">返回拍照与录音</a>
+  </header>
+
+  <main class="layout">
+    <section class="card camera" aria-label="摄像头画面">
+      <div class="stage" id="stage">
+        <video id="video" autoplay muted playsinline></video>
+        <img id="device-image" alt="CoreS3-Lite 实时摄像头画面" hidden>
+        <canvas id="overlay"></canvas>
+        <div class="placeholder"><span>◉</span>摄像头尚未打开<br>点击下方按钮开始</div>
+        <div class="stage-badge"><span class="dot"></span><span id="camera-state">摄像头关闭</span></div>
+      </div>
+      <div class="controls">
+        <select id="camera-source" aria-label="摄像头来源">
+          <option value="computer">电脑摄像头</option>
+          <option value="cores3">M5CoreS3‑Lite（USB）</option>
+        </select>
+        <button id="start">开始实时分析</button>
+        <button id="stop" class="secondary" disabled>停止</button>
+        <span id="status" role="status">模型会在首次启动时下载，请保持联网。</span>
+      </div>
+      <div class="audio-strip" aria-label="实时麦克风音频">
+        <div class="audio-head">
+          <strong>实时音频</strong>
+          <span id="audio-status">尚未连接</span>
+          <div class="level" title="麦克风电平"><div id="audio-level"></div></div>
+          <output id="audio-level-value">—</output>
+        </div>
+        <canvas id="audio-wave" width="640" height="108" aria-label="实时音频波形"></canvas>
+        <div class="audio-actions">
+          <button id="record-audio" class="secondary" disabled>开始录音</button>
+          <button id="save-audio" class="secondary" disabled>停止并下载 WAV</button>
+          <span id="record-status">未录音</span>
+          <label>监听音量 <input id="monitor-volume" type="range" min="0" max="1" value="0" step="0.05"></label>
+        </div>
+        <p class="hint">监听默认静音，以避免电脑扬声器的回放再次被 CoreS3 收入。建议戴耳机后再调高监听音量；录音不受此滑块影响。</p>
+      </div>
+    </section>
+
+    <section class="card panel" aria-label="分析结果">
+      <h2>当前检测结果</h2>
+      <div class="result">
+        <small id="face-state">等待摄像头</small>
+        <strong id="expression">尚未开始</strong>
+        <p id="expression-detail">这里显示当前可观察到的面部动作。</p>
+      </div>
+      <div class="metric" id="metrics"></div>
+      <div class="chips" id="chips"></div>
+      <p class="hint">数值是 MediaPipe 的面部动作系数，用于观察变化；它们不是情绪概率。相同动作也可能由说话、光线或拍摄角度引起。</p>
+    </section>
+  </main>
+
+  <section class="card state-panel" aria-label="状态线索">
+    <h2>最近 30 秒的状态线索</h2>
+    <div class="state-grid">
+      <div class="state-card">
+        <small>眼部线索</small>
+        <strong id="drowsy-label">开始后观察约 15 秒</strong>
+        <p id="drowsy-detail">参考持续闭眼和最近 30 秒闭眼占比。</p>
+      </div>
+      <div class="state-card">
+        <small>发呆需要本人确认</small>
+        <strong id="gaze-label">开始后观察约 15 秒</strong>
+        <p id="gaze-detail">参考最近 15 秒的视线与头部变化。</p>
+      </div>
+    </div>
+    <div class="state-numbers">
+      <span>闭眼占比<strong id="closure-value">—</strong></span>
+      <span>眨眼次数<strong id="blink-value">—</strong></span>
+      <span>最长连续闭眼<strong id="long-close-value">—</strong></span>
+    </div>
+    <div class="timeline-box">
+      <svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="最近 30 秒眼睛闭合与面部动作变化"><g id="timeline"></g></svg>
+      <div class="legend"><span><b></b>眼睛闭合</span><span><b></b>面部动作</span></div>
+    </div>
+    <p class="hint">这些是探索性线索，不是对困倦、注意力或心理状态的诊断。阅读、沉思、主动闭眼、光照和拍摄角度都可能影响结果。</p>
+  </section>
+
+  <section class="card compare" aria-label="表情分类模型对比">
+    <h2>两个模型的表情分类</h2>
+    <p class="compare-intro">网页约每 1.5 秒将裁切后的人脸发给本机服务分析。首次运行模型可能需要下载权重并等待初始化。百分比是模型分类分数，不代表真实情绪的概率。</p>
+    <div class="model-grid">
+      <div class="model-card" id="deepface-card">
+        <h3>DeepFace</h3>
+        <strong id="deepface-label">等待人脸</strong>
+        <p id="deepface-status" class="model-status">尚未运行</p>
+        <div id="deepface-scores" class="model-scores"></div>
+      </div>
+      <div class="model-card" id="emotiefflib-card">
+        <h3>EmotiEffLib</h3>
+        <strong id="emotiefflib-label">等待人脸</strong>
+        <p id="emotiefflib-status" class="model-status">尚未运行</p>
+        <div id="emotiefflib-scores" class="model-scores"></div>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">MediaPipe 在浏览器中运行；DeepFace 与 EmotiEffLib 在这台电脑的本地服务中运行。画面、音频和状态时间线默认不保存、不发往外部云端；只有主动点击“开始录音”后，停止时才会下载一份本地 WAV。模型类别只是预测，不能据此确定真实情绪。</p>
+  <script type="module" src="/face.js"></script>
+</body>
+</html>

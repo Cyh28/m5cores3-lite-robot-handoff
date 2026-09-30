@@ -1,0 +1,55 @@
+# Python
+.venv/
+.venv-asr/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Embedded build output
+.pio/
+.pioenvs/
+.piolibdeps/
+sdkconfig.*
+!**/sdkconfig.defaults
+platformio.local.ini
+**/backups/
+
+# Models and generated/private media
+.model-cache/
+.asr-models/
+outbox/
+cloud_store/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+secrets.yaml
+.secrets.yaml
+.config.yaml
+.private_config.yaml
+**/secrets*.json
+**/local*.json
+
+# Runtime and local tools
+*.log
+*.pid
+*.mp3
+*.avi
+*.spec
+.e2e-results/
+:memory:.ses
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+.claude/
+.history/
+tmp/

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>随身感知节点 · 电脑采集</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17212b; background: #f4f7f8; }
+    body { max-width: 800px; margin: 32px auto; padding: 0 18px; }
+    h1 { font-size: 1.65rem; margin-bottom: 8px; }
+    p { line-height: 1.6; color: #52606d; }
+    .card { background: white; border: 1px solid #dbe4e8; border-radius: 14px; padding: 20px; box-shadow: 0 4px 20px #1730480a; }
+    video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #17212b; border-radius: 10px; }
+    .buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    button { background: #126b62; border: 0; color: white; border-radius: 8px; padding: 11px 15px; font: inherit; cursor: pointer; }
+    button.secondary { background: #33495a; }
+    button:disabled { background: #b5c1c6; cursor: default; }
+    #status { margin-top: 16px; min-height: 24px; color: #0b6157; font-weight: 600; }
+    .note { font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>电脑摄像头与麦克风采集</h1>
+  <p><a href="/face">打开实时人脸追踪与表情观察 →</a></p>
+  <p>用电脑代替未来的徽章：打开预览后，点击“开始一条经历”拍一张照片并开始录音；点击“结束并保存”将两份原始文件关联到同一个事件。</p>
+  <div class="card">
+    <video id="preview" autoplay playsinline muted></video>
+    <div class="buttons">
+      <button id="open">打开摄像头与麦克风</button>
+      <button id="start" disabled>开始一条经历</button>
+      <button id="stop" disabled class="secondary">结束并保存</button>
+      <button id="close" disabled class="secondary">关闭设备</button>
+    </div>
+    <div id="status" role="status">等待打开设备。</div>
+  </div>
+  <p class="note">浏览器会请求摄像头和麦克风权限。每段录音最长 10 秒，文件保存在这台电脑的 <code>outbox/</code>；点击“结束”不会自动上传。当前尚未接入真实图像理解或语音识别。</p>
+  <script>
+    const $ = id => document.getElementById(id);
+    let stream = null, recorder = null, frameBlob = null, capturedAt = null;
+    let chunks = [], timer = null;
+    const status = message => { $("status").textContent = message; };
+
+    function updateButtons(recording = false) {
+      $("open").disabled = Boolean(stream);
+      $("start").disabled = !stream || recording;
+      $("stop").disabled = !recording;
+      $("close").disabled = !stream || recording;
+    }
+
+    $("open").onclick = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+          throw new Error("当前浏览器不支持摄像头/录音 API，请用新版 Chrome、Edge 或 Safari 打开本机地址。");
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true });
+        $("preview").srcObject = stream;
+        await $("preview").play();
+        updateButtons();
+        status("设备已打开。可以开始一条经历。");
+      } catch (error) {
+        stream?.getTracks().forEach(track => track.stop());
+        stream = null;
+        updateButtons();
+        status("打开失败：" + error.message);
+      }
+    };
+
+    function chooseAudioType() {
+      for (const type of ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"]) {
+        if (MediaRecorder.isTypeSupported(type)) return type;
+      }
+      return "";
+    }
+
+    $("start").onclick = async () => {
+      try {
+        const video = $("preview");
+        if (!video.videoWidth) throw new Error("摄像头画面尚未就绪");
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.min(video.videoWidth, 1280);
+        canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
+        canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+        frameBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+        if (!frameBlob) throw new Error("照片生成失败");
+        capturedAt = new Date().toISOString();
+        chunks = [];
+        const audioStream = new MediaStream(stream.getAudioTracks());
+        const type = chooseAudioType();
+        recorder = type ? new MediaRecorder(audioStream, { mimeType: type }) : new MediaRecorder(audioStream);
+        recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+        recorder.onerror = event => status("录音失败：" + (event.error?.message || "未知错误"));
+        recorder.onstop = saveEvent;
+        recorder.start();
+        updateButtons(true);
+        status("录音中；照片已拍摄。最多记录 10 秒。");
+        timer = setTimeout(() => { if (recorder?.state === "recording") $("stop").click(); }, 10000);
+      } catch (error) {
+        updateButtons();
+        status("开始失败：" + error.message);
+      }
+    };
+
+    $("stop").onclick = () => {
+      clearTimeout(timer);
+      if (recorder?.state === "recording") {
+        $("stop").disabled = true;
+        status("正在保存照片和录音……");
+        recorder.stop();
+      }
+    };
+
+    const base64 = blob => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",", 2)[1]);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+
+    async function saveEvent() {
+      try {
+        const audio = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || "audio/webm" });
+        if (!audio.size) throw new Error("录音为空，请稍后重试");
+        const kind = audio.type.includes("mp4") ? "mp4" : audio.type.includes("ogg") ? "ogg" : "webm";
+        const response = await fetch("/capture", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ captured_at: capturedAt, files: {
+            "frame.jpg": await base64(frameBlob), ["audio." + kind]: await base64(audio)
+          } })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "保存失败");
+        status("已保存到本地，事件编号：" + result.event_id + "。可继续记录下一条。");
+      } catch (error) {
+        status("保存失败：" + error.message);
+      } finally {
+        recorder = null;
+        chunks = [];
+        updateButtons();
+      }
+    }
+
+    $("close").onclick = () => {
+      stream?.getTracks().forEach(track => track.stop());
+      stream = null;
+      $("preview").srcObject = null;
+      updateButtons();
+      status("设备已关闭。");
+    };
+    window.addEventListener("pagehide", () => stream?.getTracks().forEach(track => track.stop()));
+  </script>
+</body>
+</html>
